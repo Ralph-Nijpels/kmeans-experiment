@@ -1,3 +1,5 @@
-image.png
-palm_tree.png
-foto.jpg
+etc/*
+bin/*
+*.png
+*.jpg
+*.exe
