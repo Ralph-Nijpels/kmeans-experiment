@@ -65,11 +65,50 @@ func main() {
 	initProcess(imgTmp)
 	fmt.Println("round 1 - run")
 	setToNearest(imgTmp)
+	fmt.Println("round 1 - shift")
+	fmt.Printf("%v \n", nodeTable)
+	nodeTable.Shift()
+	fmt.Println("round 1 - split")
+	nodeTable.Split()
 	fmt.Println("round 1 - reset")
 	nodeTable.Reset()
+
 	fmt.Println("round 2 - run")
 	setToNearest(imgTmp)
+	fmt.Println("round 2 - shift")
+	nodeTable.Shift()
+	fmt.Printf("%v \n", nodeTable)
+	fmt.Println("round 2 - split")
+	nodeTable.Split()
 	fmt.Println("round 2 - reset")
+	nodeTable.Reset()
+
+	fmt.Println("round 3 - run")
+	setToNearest(imgTmp)
+	fmt.Println("round 3 - shift")
+	nodeTable.Shift()
+	fmt.Printf("%v \n", nodeTable)
+	fmt.Println("round 3 - split")
+	nodeTable.Split()
+	fmt.Println("round 3 - reset")
+	nodeTable.Reset()
+
+	fmt.Println("round 4 - run")
+	setToNearest(imgTmp)
+	fmt.Println("round 4 - shift")
+	nodeTable.Shift()
+	fmt.Printf("%v \n", nodeTable)
+	fmt.Println("round 4 - split")
+	nodeTable.Split()
+	fmt.Println("round 4 - reset")
+	nodeTable.Reset()
+
+	fmt.Println("round 5 - run")
+	setToNearest(imgTmp)
+	fmt.Println("round 5 - shift")
+	nodeTable.Shift()
+	// No Split!!
+	fmt.Println("round 5 - reset")
 	nodeTable.Reset()
 
 	// Let's set every pixel to the average of it's neighbours
@@ -78,8 +117,8 @@ func main() {
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			// Take color from the colortable
-			pColor := nodeTable.Get(nodeAssignments.GetGroup(x, y)).Get()
-			pNew := color.NRGBA{uint8(pColor[0]), uint8(pColor[1]), uint8(pColor[2]), 0xFF}
+			pColor := nodeTable.Get(nodeAssignments.GetGroup(x, y))
+			pNew := color.NRGBA{uint8(pColor.Get(0)), uint8(pColor.Get(1)), uint8(pColor.Get(2)), 0xFF}
 			imgOut.Set(x, y, pNew)
 		}
 	}
