@@ -3,8 +3,6 @@ package palette
 import (
 	"fmt"
 	"image"
-	"log"
-	"math"
 	"sort"
 	"strings"
 
@@ -41,10 +39,10 @@ type Palette struct {
 }
 
 // New creates a Palette for you
-func New(img *image.RGBA) *Palette {
+func New(size int) *Palette {
 	var p Palette
 
-	p.nodes = make([]node, 64)
+	p.nodes = make([]node, size)
 	for i := range p.nodes {
 		// No seed used, but that is OK for now
 		p.nodes[i].center = vector.Rand(3).Muls(256.0)
@@ -57,78 +55,121 @@ func New(img *image.RGBA) *Palette {
 	return &p
 }
 
-// Append adds a pixel from the picture to a pallete node.
-func (p *Palette) Append(rImg float64, gImg float64, bImg float64) int {
-	iClose := 0
-
-	img := vector.Make([]float64{rImg, gImg, bImg})
-	dClose := p.nodes[iClose].center.Sub(img).Abs()
-	if math.IsNaN(dClose) {
-		log.Panicf("Abs of %v - %v is NaN", p.nodes[iClose].center, img)
-	}
+// reset clears the administrative part of the palette
+func (p *Palette) reset() {
+	// Administration set to 0
 	for i := range p.nodes {
-		d := p.nodes[i].center.Sub(img).Abs()
-		if math.IsNaN(d) {
-			log.Panicf("Abs of %v - %v is NaN", p.nodes[i].center, img)
-		}
+		p.nodes[i].min = vector.Zero(3)
+		p.nodes[i].max = vector.Zero(3)
+		p.nodes[i].total = vector.Zero(3)
+		p.nodes[i].count = 0
+	}
+}
+
+// appendPixel adds a pixel from the picture to a pallete node.
+func (p *Palette) analysePixel(pix vector.Vector) {
+
+	// Find the closest palette entry
+	iClose := 0
+	dClose := p.nodes[iClose].center.Sub(pix).Abs()
+	for i := range p.nodes {
+		d := p.nodes[i].center.Sub(pix).Abs()
 		if d < dClose {
 			iClose = i
 			dClose = d
 		}
 	}
 
-	p.nodes[iClose].total = p.nodes[iClose].total.Add(img)
+	// Keep a running bounded box of the color area covered
+	// to speed up the 'split' operations
 	if p.nodes[iClose].count > 0 {
-		p.nodes[iClose].min = p.nodes[iClose].min.Min(img)
-		p.nodes[iClose].max = p.nodes[iClose].max.Max(img)
+		p.nodes[iClose].min = p.nodes[iClose].min.Min(pix)
+		p.nodes[iClose].max = p.nodes[iClose].max.Max(pix)
 	} else {
-		p.nodes[iClose].min = img
-		p.nodes[iClose].max = img
+		p.nodes[iClose].min = pix
+		p.nodes[iClose].max = pix
 	}
-	p.nodes[iClose].count++
 
-	return iClose
+	// Keep a running total for all pixels added to
+	// speed up the 'shift' operation
+	p.nodes[iClose].total = p.nodes[iClose].total.Add(pix)
+	p.nodes[iClose].count++
 }
 
-// Shift moves the colors to the center of their group
-func (p *Palette) Shift() {
-	for i := range p.nodes {
-		if p.nodes[i].count > 0 {
-			p.nodes[i].center = p.nodes[i].total.Divs(float64(p.nodes[i].count))
+// analyse maps the pixels of the image to the palette entries
+func (p *Palette) analyse(img *image.RGBA) {
+	p.reset()
+	for y := img.Bounds().Min.Y; y < img.Bounds().Max.Y; y++ {
+		for x := img.Bounds().Min.X; x < img.Bounds().Max.X; x++ {
+			pOffset := img.PixOffset(x, y)
+			pVector := vector.Make([]float64{
+				float64(img.Pix[pOffset]),
+				float64(img.Pix[pOffset+1]),
+				float64(img.Pix[pOffset+2])})
+			p.analysePixel(pVector)
 		}
 	}
 }
 
-// Split splits the overpopulated nodes and splits them
-func (p *Palette) Split() {
-	sort.Sort(byCount(p.nodes))
-
-	// Perform a kind of butterfly scan over the nodes
-	// Split by a relatively small value (1% of the colorspace) to prevent stealing from other groups
-	// If the colorspace doesn't leave room for splitting, we are going for a next kandidate.
-	b, t := 0, len(p.nodes)-1
-	for p.nodes[b].count*3 < p.nodes[t].count {
-		colorSpace := p.nodes[t].max.Sub(p.nodes[t].min)
-		if colorSpace.Abs() != 0.0 {
-			splitVector := colorSpace.Unit().Muls(0.01)
-			if math.IsNaN(splitVector.Abs()) {
-				log.Panicf("SplitVector %v in %v(%v,%v) leads to NaN", splitVector, colorSpace, p.nodes[t].min, p.nodes[t].max)
+// Shift moves the colors to the center of their group
+// There is a magic number, currently set at '1.0', to determine what counts as a shift. This to prevent the
+// algorithm to start 'hunting' when pixels shift from one side to the other and back (again...)
+func (p *Palette) shift() int {
+	shifts := 0
+	for i := range p.nodes {
+		if p.nodes[i].count > 0 {
+			newCenter := p.nodes[i].total.Divs(float64(p.nodes[i].count))
+			if p.nodes[i].center.Sub(newCenter).Abs() > 1.0 {
+				p.nodes[i].center = newCenter
+				shifts++
 			}
+		}
+	}
+	return shifts
+}
+
+// Split splits the overpopulated nodes and splits them
+// Perform a kind of butterfly scan over the nodes. Split by a relatively small value (1% of the colorspace) to prevent
+// stealing from other groups. If the colorspace doesn't leave room for splitting, we are going for a next kandidate.
+// The minimum size of the colorspace needed is set to '3.0'
+func (p *Palette) split() int {
+
+	splits := 0
+
+	sort.Sort(byCount(p.nodes))
+	b, t := 0, len(p.nodes)-1
+	for p.nodes[b].count*10 < p.nodes[t].count {
+		colorSpace := p.nodes[t].max.Sub(p.nodes[t].min)
+		if colorSpace.Abs() > 3.0 {
+			splitVector := colorSpace.Unit().Muls(0.01)
 			p.nodes[b].center = p.nodes[t].center.Sub(splitVector)
 			p.nodes[t].center = p.nodes[t].center.Add(splitVector)
+			splits++
 			b++
 		}
 		t--
 	}
+
+	return splits
 }
 
-// Reset moves the colors to the center of their group
-func (p *Palette) Reset() {
-	// Administration set to 0
-	for i := range p.nodes {
-		p.nodes[i].total = vector.Zero(3)
-		p.nodes[i].count = 0
+// SetFromImage determines the colors needed to best represent the picture by
+// applying a k-nearest algorithm where k is determined by the size of the palette.
+// It will run until no more shifts and splits are needed.
+func (p *Palette) SetFromImage(img *image.RGBA) error {
+
+	round := 0
+	p.analyse(img)
+	shifts := p.shift()
+	splits := p.split()
+	for (shifts > 0 || splits > 0) && (round < 5) {
+		p.analyse(img)
+		shifts = p.shift()
+		splits = p.split()
+		round++
 	}
+
+	return nil
 }
 
 // String provides a printable version of the current content of the palette

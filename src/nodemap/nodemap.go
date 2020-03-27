@@ -1,31 +1,55 @@
 package nodemap
 
-import "image"
+import (
+	"image"
+
+	"../palette"
+	"../vector"
+)
 
 // Nodemap contains the assignment of each pixel to a color in the colortable
 type Nodemap struct {
-	Assignments []uint16
-	Top         int
-	Left        int
-	Bottom      int
-	Right       int
+	bounds      image.Rectangle
+	assignments []int
 }
 
 // New creates a nodemap for all pixels in your image
-func New(img *image.RGBA) *Nodemap {
-	top := img.Bounds().Min.Y
-	left := img.Bounds().Min.X
-	bottom := img.Bounds().Max.Y
-	right := img.Bounds().Max.X
-	return &Nodemap{make([]uint16, (bottom-top)*(right-left)), top, left, bottom, right}
+func New(img *image.RGBA, p *palette.Palette) *Nodemap {
+
+	bounds := img.Bounds()
+	nmap := Nodemap{bounds, make([]int, bounds.Dy()*bounds.Dx())}
+
+	for py := 0; py < bounds.Dy(); py++ {
+		for px := 0; px < bounds.Dx(); px++ {
+
+			pOffset := img.PixOffset(
+				bounds.Min.X+px,
+				bounds.Min.Y+py)
+
+			pVector := vector.Make([]float64{
+				float64(img.Pix[pOffset]),
+				float64(img.Pix[pOffset+1]),
+				float64(img.Pix[pOffset+2])})
+
+			iClose := 0
+			dClose := p.Get(0).Sub(pVector).Abs()
+			for c := 1; c < p.Len(); c++ {
+				distance := p.Get(c).Sub(pVector).Abs()
+				if distance < dClose {
+					dClose = distance
+					iClose = c
+				}
+			}
+
+			nmap.assignments[py*bounds.Dx()+px] = iClose
+		}
+	}
+
+	return &nmap
 }
 
 // GetGroup provides the assigned group number of a pixel at (x,y)
 func (nmap *Nodemap) GetGroup(x, y int) int {
-	return int(nmap.Assignments[(y-nmap.Top)*(nmap.Right-nmap.Left)+x])
-}
-
-// SetGroup assigns group v to a pixel at (x,y)
-func (nmap *Nodemap) SetGroup(x, y int, v int) {
-	nmap.Assignments[(y-nmap.Top)*(nmap.Right-nmap.Left)+x] = uint16(v)
+	iWidth := nmap.bounds.Dx()
+	return nmap.assignments[y*iWidth+x]
 }
