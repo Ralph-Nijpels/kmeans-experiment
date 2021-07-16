@@ -8,16 +8,13 @@ import (
 	"image/png"
 	"log"
 	"os"
-
-	"./nodemap"
-	"./palette"
 )
 
-var myPallette *palette.Palette
+var myPallette *Palette
 
 // The nodeTable is initialize to a set of random colors
 func initProcess(img *image.RGBA) {
-	myPallette = palette.New(64)
+	myPallette = CreatePalette(64)
 }
 
 func main() {
@@ -47,7 +44,7 @@ func main() {
 	initProcess(imgTmp)
 
 	myPallette.SetFromImage(imgTmp)
-	myNodeMap := nodemap.New(imgTmp, myPallette)
+	myNodeMap := CreateNodemap(imgTmp, myPallette)
 
 	// Let's set every pixel to the average of it's neighbours
 	fmt.Println("write")

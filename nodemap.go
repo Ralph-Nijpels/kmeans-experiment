@@ -1,10 +1,9 @@
-package nodemap
+package main
 
 import (
 	"image"
 
-	"../palette"
-	"../vector"
+	"github.com/ralph-nijpels/vector"
 )
 
 // Nodemap contains the assignment of each pixel to a color in the colortable
@@ -14,7 +13,7 @@ type Nodemap struct {
 }
 
 // New creates a nodemap for all pixels in your image
-func New(img *image.RGBA, p *palette.Palette) *Nodemap {
+func CreateNodemap(img *image.RGBA, p *Palette) *Nodemap {
 
 	bounds := img.Bounds()
 	nmap := Nodemap{bounds, make([]int, bounds.Dy()*bounds.Dx())}

@@ -1,4 +1,4 @@
-package palette
+package main
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"../vector"
+	"github.com/ralph-nijpels/vector"
 )
 
 // node represents an item in the Palette.
@@ -39,7 +39,7 @@ type Palette struct {
 }
 
 // New creates a Palette for you
-func New(size int) *Palette {
+func CreatePalette(size int) *Palette {
 	var p Palette
 
 	p.nodes = make([]node, size)
